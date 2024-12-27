@@ -26,38 +26,43 @@ app.use(cookieParser());
 
 io.on("connection",(socket)=>{
     console.log("User Connected", socket.id)
-    socket.on('send-message',async(message,selectedContact)=> {
-       socket.to(selectedContact?.contactId).emit('emit-message',message)
+    
+    socket.on("join-room", (roomId) => {
+        socket.join(roomId);
+        console.log(`User joined room: ${roomId}`);
+    });
+
+    socket.on('send-message',async(message,roomId)=> {
+       io.to(roomId).emit('emit-message',message)
+    //    socket.emit('emit-message',message)
         const isExists = await prisma.meassages.findMany({
             where: {
-                senderId:selectedContact?.userId,
-                receiverId:selectedContact?.contactId,
+                senderId:message?.selectedContact?.userId,
+                receiverId:message?.selectedContact?.contactId,
             }
         })
        if(isExists.length == 0) {
         const result = await prisma.meassages.create({
             data: {
-                senderId: selectedContact?.userId,
-                receiverId: selectedContact?.contactId,
-                content: [message],
+                senderId: message?.selectedContact?.userId,
+                receiverId: message?.selectedContact?.contactId,
+                content: [message?.content],
             }
         })
        }
        else{
-        let existingContent = isExists[0]?.content;
-  if (typeof existingContent === 'string') {
-    existingContent = [existingContent]; // Convert to an array
-  }
+        // let existingContent = isExists[0]?.content;
+ 
         const result = await prisma.meassages.update({
             where: {
                 id: isExists[0]?.id,
-                senderId: selectedContact?.userId,
-                receiverId: selectedContact?.contactId,
+                senderId: message?.selectedContact?.userId,
+                receiverId: message?.selectedContact?.contactId,
 
             },
             data: {
                 content: {
-                    push: message, // Append a single new message
+                    push: message?.content, // Append a single new message
                   },
             }
         })

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import "./Home.css";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { Avatar } from "@mui/material";
@@ -11,7 +11,7 @@ import AddCommentIcon from "@mui/icons-material/AddComment";
 import SendIcon from "@mui/icons-material/Send";
 import axios from "axios";
 // import App from "../../App";
-import { io } from "socket.io-client";
+import { Socket, io } from "socket.io-client";
 import AddNewContact from "../../pages/AddNewContact/AddNewContact";
 import ClearIcon from "@mui/icons-material/Clear";
 import AllContacts from "../../pages/AllContacts/AllContacts";
@@ -30,19 +30,94 @@ const Home = () => {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [vertIconClick, setVertIconClick] = useState(false);
-  const socket = io("http://localhost:8000");
+  const socket = useRef<Socket | null>(null);
+  // const socket = io("http://localhost:8000");
 
+  useEffect(() => {
+    // Initialize socket only once
+    socket.current = io("http://localhost:8000");
+
+    return () => {
+      // Clean up socket connection when component unmounts
+      socket.current?.disconnect();
+    };
+  }, []);
+
+
+  useEffect(() => {
+    if (user?.id && selectedContact?.contactId) {
+      const roomId =
+        String(user.id) < String(selectedContact.contactId)
+          ? `${user.id}_${selectedContact.contactId}`
+          : `${selectedContact.contactId}_${user.id}`;
+  
+      console.log("Generated Room ID:", roomId); // Debugging output
+      socket.current?.emit("join-room", roomId);
+    }
+  }, [user, selectedContact]);
+
+  
   function handleClick() {
-    socket.emit("send-message", message, selectedContact);
-    setMessage("");
+    // socket.current?.emit("send-message", message, selectedContact);
+    // setMessage("");
+    if (user?.id && selectedContact?.id) {
+      const roomId =
+        String(user.id) < String(selectedContact.contactId)
+          ? `${user.id}_${selectedContact.contactId}`
+          : `${selectedContact.contactId}_${user.id}`;
+  
+          socket.current?.emit("join-room", roomId);
+          socket.current?.emit("send-message", { selectedContact: selectedContact, content: message }, roomId);
+          setMessage("");
+    }
+  //  if (user?.id && selectedContact?.id) {
+  //     const roomId =
+  //     String(user.id).localeCompare(String(selectedContact.id)) < 0
+  //         ? `${user.id}_${selectedContact.id}`
+  //         : `${selectedContact.id}_${user.id}`;
+  
+      
+  //   }
   }
+  useEffect(() => {
+    if(user?.id && selectedContact?.contactId) {
+      socket.current?.on("emit-message", (newMessage) => {
+        console.log("Received new message:", newMessage);
+    
+        // If the received message is for the current user, add it to the correct message list
+        if (newMessage?.selectedContact?.userId === user?.id) {
+          console.log('Sender received message');
+          setAllMessages((prevMessages) => [...prevMessages, newMessage?.content]);
+        } 
+        
+        if (newMessage?.selectedContact?.contactId === user?.id) {
+          console.log('Receiver received message');
+          setReceiverMessages((prevMessages) => [...prevMessages, newMessage?.content]);
+        }
+      });
+    
+      return () => {
+        socket.current?.off("emit-message");
+      };
+    }
+  }, [user, selectedContact]);
 
-  socket.on("emit-message", (message) => {
-    setAllMessages((prevMessages) => [
-      ...prevMessages,
-      message
-    ]);
-  });
+  // useEffect(() => {
+  //   socket.current?.on("emit-message", (newMessage) => {
+  //     setAllMessages((prevMessages) => [...prevMessages, newMessage]);
+  //   });
+  
+  //   return () => {
+  //     socket.current?.off("emit-message");
+  //   };
+  // }, []);
+  
+  // socket.on("emit-message", (message) => {
+  //   setAllMessages((prevMessages) => [
+  //     ...prevMessages,
+  //     message
+  //   ]);
+  // });
 
   useEffect(() => {
     const fetchData = async () => {
